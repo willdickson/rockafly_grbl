@@ -7,18 +7,21 @@ SEC_PER_MIN = 60.0
 
 class RockaflyGrbl(object):
 
-    CIRCLE_DIR_TO_GCODE = {
-            'pos': 'G2',
-            'neg': 'G3',
+    CIRCLE_DIR_TO_SIGN = {
+            'pos':  1,
+            'neg': -1,
             }
 
     def __init__(self, param):
         self.param = param
         self.comm = GrblComm(port=self.param['port'], baudrate=self.param['baudrate'])
-        self.settings = self.comm.get_settings()
+        self.update_settings()
         self.check_settings()
         #for k,v in self.settings.items():
         #    print(k,v)
+
+    def update_settings(self):
+        self.settings = self.comm.get_settings()
 
     def check_settings(self):
         x_step_per_mm = self.settings['x_step_per_mm']
@@ -111,6 +114,7 @@ class RockaflyGrbl(object):
         self.comm.set_x_step_per_mm(step_per_mm)
         self.comm.set_y_step_per_mm(step_per_mm)
         self.comm.set_y_step_per_mm(step_per_mm)
+        self.update_settings()
 
     def set_max_speed(self,speed):
         """ Set the max_speed (deg/sec) """
@@ -118,6 +122,7 @@ class RockaflyGrbl(object):
         self.comm.set_x_max_rate_mm_per_min(speed_mm_per_min)
         self.comm.set_y_max_rate_mm_per_min(speed_mm_per_min)
         self.comm.set_z_max_rate_mm_per_min(speed_mm_per_min)
+        self.update_settings()
 
     def set_max_accel(self,accel):
         """ Set the max_accel (deg/sec**2) """
@@ -125,6 +130,7 @@ class RockaflyGrbl(object):
         self.comm.set_x_accel_mm_per_sec2(accel_mm_per_sec2)
         self.comm.set_y_accel_mm_per_sec2(accel_mm_per_sec2)
         self.comm.set_z_accel_mm_per_sec2(accel_mm_per_sec2)
+        self.update_settings()
 
     def move_to(self, pos, speed):
         """ Linear move to pos (deg) at speed (deg/sec) """
@@ -147,24 +153,26 @@ class RockaflyGrbl(object):
         direction  = direction of sinusoid 'pos' or 'neg'
 
         """
-        speed = amplitude*(2.0*math.pi/period)
+        speed = abs(amplitude*(2.0*math.pi/period))
+        #print('speed: {}, max_speed: {}'.format(speed, self.max_speed))
         if speed > self.max_speed:
             raise RuntimeError('sinusoid speed > max_speed')
-        accel = amplitude*(2.0*math.pi/period)**2
+        accel = abs(amplitude*(2.0*math.pi/period)**2)
+        #print('accel: {}, max_accel: {}'.format(accel, self.max_accel))
         if accel > self.max_accel:
             raise RuntimeError('sinusoid accel > max_accel')
         amplitude_mm = self.convert_deg_to_mm(amplitude)
         feedrate_mm_per_min = self.convert_deg_to_mm(speed)*SEC_PER_MIN 
 
-        circle_cmd = self.CIRCLE_DIR_TO_GCODE[direction]
+        offset_sign= self.CIRCLE_DIR_TO_SIGN[direction]
         x_pos_mm, y_pos_mm = self.xy_position_mm
 
         gcode_dict = {
-                'cmd' : circle_cmd,
+                'cmd' : 'G2',
                 'F'   : feedrate_mm_per_min,
                 'X'   : x_pos_mm, 
                 'Y'   : y_pos_mm, 
-                'I'   : x_pos_mm + amplitude_mm,
+                'I'   : offset_sign*(x_pos_mm + amplitude_mm),
                 }
         gcode_cmd = '{cmd} F{F:1.3f} X{X:1.3f} Y{Y:1.3f} I{I:1.3f}'.format(**gcode_dict)
         gcode_list = [gcode_cmd for i in range(cycles)]
