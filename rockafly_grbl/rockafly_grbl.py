@@ -35,10 +35,10 @@ class RockaflyGrbl(object):
             raise RuntimeError('x_accel_mm_per_sec2 must equal y_accel_mm_per_sec2')
 
     def convert_deg_to_mm(self,val):
-        return val/self.param['deg_per_mm']
+        return val*self.mm_per_deg
 
     def convert_mm_to_deg(self,val):
-        return val*self.param['deg_per_mm']
+        return val*self.deg_per_mm
 
     @property
     def max_speed(self):
@@ -59,6 +59,26 @@ class RockaflyGrbl(object):
     @property
     def step_per_deg(self):
         return self.step_per_rev/360.0
+
+    @property
+    def deg_per_step(self):
+        return 360.0/self.step_per_rev
+
+    @property
+    def deg_per_mm(self):
+        return self.deg_per_step*self.step_per_mm
+
+    @property
+    def mm_per_deg(self):
+        return self.step_per_deg/self.step_per_mm
+
+    @property
+    def step_per_mm(self):
+        return self.settings['x_step_per_mm']
+
+    @property
+    def mm_per_step(self):
+        return 1.0/self.step_per_mm
 
     @property
     def status(self):
@@ -86,17 +106,25 @@ class RockaflyGrbl(object):
         status = self.status
         return status['WPos']['x'], status['WPos']['y']
 
+    def set_step_per_mm(self, step_per_mm):
+        """ Set the number of steps per mm """
+        self.comm.set_x_step_per_mm(step_per_mm)
+        self.comm.set_y_step_per_mm(step_per_mm)
+        self.comm.set_y_step_per_mm(step_per_mm)
+
     def set_max_speed(self,speed):
         """ Set the max_speed (deg/sec) """
         speed_mm_per_min = self.convert_deg_to_mm(speed)*SEC_PER_MIN
         self.comm.set_x_max_rate_mm_per_min(speed_mm_per_min)
         self.comm.set_y_max_rate_mm_per_min(speed_mm_per_min)
+        self.comm.set_z_max_rate_mm_per_min(speed_mm_per_min)
 
     def set_max_accel(self,accel):
         """ Set the max_accel (deg/sec**2) """
         accel_mm_per_sec2 = self.convert_deg_to_mm(accel)
         self.comm.set_x_accel_mm_per_sec2(accel_mm_per_sec2)
         self.comm.set_y_accel_mm_per_sec2(accel_mm_per_sec2)
+        self.comm.set_z_accel_mm_per_sec2(accel_mm_per_sec2)
 
     def move_to(self, pos, speed):
         """ Linear move to pos (deg) at speed (deg/sec) """
@@ -110,6 +138,8 @@ class RockaflyGrbl(object):
     def sinusoid(self, amplitude, period, cycles, direction='pos'):
         """ 
         Run sinusoid (cosine) starting from the current position 
+
+        theta = amplitude*cos(2.0*PI*t/period)
 
         amplitude  = amplitude of sinusoid (deg), float
         period     = period of sinusoid (sec),    float
